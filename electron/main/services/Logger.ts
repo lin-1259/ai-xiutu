@@ -7,9 +7,11 @@ export class Logger {
   private logLevel: 'debug' | 'info' | 'warn' | 'error' = 'info';
   private enableFileLogging: boolean = true;
   private enableConsoleLogging: boolean = true;
+  private userDataPath: string;
 
-  constructor() {
-    this.logDir = join(process.env.APPDATA || join(process.cwd(), 'data'), 'logs');
+  constructor(userDataPath: string) {
+    this.userDataPath = userDataPath;
+    this.logDir = join(this.userDataPath, 'logs');
     this.ensureLogDirectory();
   }
 

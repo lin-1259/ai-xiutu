@@ -46,7 +46,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesAdded }) => {
           const imageFile: ImageFile = {
             id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name: file.name,
-            path: file.name, // 在桌面应用中，这里应该是实际路径
+            path: (file as any).path || file.name,
             size: file.size,
             width: dimensions.width,
             height: dimensions.height,
@@ -118,26 +118,35 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFilesAdded }) => {
         });
 
         if (!result.canceled && result.filePaths.length > 0) {
-          // 模拟文件处理（实际应用中需要读取文件信息）
-          const mockFiles: ImageFile[] = result.filePaths.map((path: string, index: number) => {
-            const fileName = path.split('/').pop() || `image_${index}`;
-            return {
-              id: `img_${Date.now()}_${index}`,
-              name: fileName,
-              path: path,
-              size: Math.random() * 1000000 + 500000, // 模拟文件大小
-              width: 1920,
-              height: 1080,
-              format: fileName.split('.').pop()?.toUpperCase() || 'JPG',
-              createdAt: new Date(),
-              status: 'pending',
-              progress: 0
-            };
-          });
+          const imageFiles: ImageFile[] = [];
+          
+          for (const path of result.filePaths) {
+            try {
+              const info = await window.electronAPI.readImageInfo(path);
+              const fileName = path.split(/[\\/]/).pop() || 'unknown';
+              
+              imageFiles.push({
+                id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: fileName,
+                path: path,
+                size: info.size,
+                width: info.width,
+                height: info.height,
+                format: info.format.toUpperCase(),
+                createdAt: new Date(),
+                status: 'pending',
+                progress: 0
+              });
+            } catch (error) {
+              console.error(`Failed to read info for ${path}:`, error);
+            }
+          }
 
-          addImages(mockFiles);
-          onFilesAdded?.(mockFiles);
-          message.success(`成功添加 ${mockFiles.length} 个文件`);
+          if (imageFiles.length > 0) {
+            addImages(imageFiles);
+            onFilesAdded?.(imageFiles);
+            message.success(`成功添加 ${imageFiles.length} 个文件`);
+          }
         }
       }
     } catch (error) {

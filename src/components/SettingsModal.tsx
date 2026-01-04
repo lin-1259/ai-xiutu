@@ -104,8 +104,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
     try {
       const values = await apiForm.validateFields();
       
+      // 处理customHeaders JSON字符串
+      if (values.customHeaders && typeof values.customHeaders === 'string' && values.customHeaders.trim()) {
+        try {
+          values.customHeaders = JSON.parse(values.customHeaders);
+        } catch (e) {
+          message.error('自定义请求头JSON格式错误');
+          return;
+        }
+      } else {
+        values.customHeaders = {};
+      }
+      
       if (window.electronAPI) {
-        const providerId = await window.electronAPI.addCustomApiProvider(values);
+        await window.electronAPI.addCustomApiProvider(values);
         message.success('API提供商添加成功');
         setIsAddingProvider(false);
         apiForm.resetFields();
@@ -119,6 +131,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const handleUpdateProvider = async (id: string) => {
     try {
       const values = await apiForm.validateFields();
+      
+      // 处理customHeaders JSON字符串
+      if (values.customHeaders && typeof values.customHeaders === 'string' && values.customHeaders.trim()) {
+        try {
+          values.customHeaders = JSON.parse(values.customHeaders);
+        } catch (e) {
+          message.error('自定义请求头JSON格式错误');
+          return;
+        }
+      } else if (values.customHeaders && typeof values.customHeaders === 'object') {
+        // 已经是对象，保持不变
+      } else {
+        values.customHeaders = {};
+      }
       
       if (window.electronAPI) {
         await window.electronAPI.updateApiProvider(id, values);
@@ -158,7 +184,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
 
   const startEditProvider = (provider: any) => {
     setEditingProvider(provider);
-    apiForm.setFieldsValue(provider);
+    const formValues = { ...provider };
+    if (formValues.customHeaders && typeof formValues.customHeaders === 'object') {
+      formValues.customHeaders = JSON.stringify(formValues.customHeaders, null, 2);
+    }
+    apiForm.setFieldsValue(formValues);
   };
 
   const cancelEdit = () => {

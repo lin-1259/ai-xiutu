@@ -9,8 +9,7 @@
     "allowJs": true,
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "./dist"
+    "outDir": "../dist/electron"
   },
-  "include": ["electron/**/*.ts"]
+  "include": ["**/*.ts"]
 }

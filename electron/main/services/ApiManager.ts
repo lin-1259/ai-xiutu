@@ -92,12 +92,14 @@ export class ApiManager {
       (response) => response,
       async (error) => {
         const config = error.config;
-        
-        if (!config._retryCount) {
-          config._retryCount = 0;
+
+        if (!config || !config.url) {
+          return Promise.reject(error);
         }
 
-        const maxRetries = config.baseConfig?.maxRetries || 3;
+        config._retryCount = config._retryCount || 0;
+
+        const maxRetries = 3;
         if (config._retryCount < maxRetries) {
           config._retryCount++;
           await this.delay(1000 * config._retryCount);
