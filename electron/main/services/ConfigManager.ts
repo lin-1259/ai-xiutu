@@ -211,14 +211,44 @@ export class ConfigManager {
   }
 
   // 获取API配置
-  getApiConfig(provider: 'doubao' | 'gemini'): any {
+  getApiConfig(provider: string): any {
     const configKey = `api.${provider}`;
     return this.get(configKey) || {};
   }
 
-  setApiConfig(provider: 'doubao' | 'gemini', config: any): void {
+  // 设置API配置
+  setApiConfig(provider: string, config: any): void {
     const configKey = `api.${provider}`;
     this.set(configKey, config);
+  }
+
+  // 获取所有API配置
+  getAllApiConfigs(): any {
+    return this.get('api') || {};
+  }
+
+  // 设置所有API配置
+  setAllApiConfigs(configs: any): void {
+    this.set('api', configs);
+  }
+
+  // 添加自定义API配置
+  addCustomApiConfig(id: string, config: any): void {
+    const customApis = this.get('api.custom') || {};
+    customApis[id] = config;
+    this.set('api.custom', customApis);
+  }
+
+  // 移除自定义API配置
+  removeCustomApiConfig(id: string): void {
+    const customApis = this.get('api.custom') || {};
+    delete customApis[id];
+    this.set('api.custom', customApis);
+  }
+
+  // 获取自定义API配置
+  getCustomApiConfigs(): any {
+    return this.get('api.custom') || {};
   }
 
   // 获取主题配置

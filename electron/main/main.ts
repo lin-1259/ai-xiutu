@@ -8,6 +8,7 @@ import { HotFolderManager } from './services/HotFolderManager.js';
 import { SystemIntegration } from './services/SystemIntegration.js';
 import { ConfigManager } from './services/ConfigManager.js';
 import { Logger } from './services/Logger.js';
+import { ApiManager } from './services/ApiManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,11 +21,13 @@ class PhotoEditorApp {
   private systemIntegration: SystemIntegration;
   private configManager: ConfigManager;
   private logger: Logger;
+  private apiManager: ApiManager;
 
   constructor() {
     this.logger = new Logger();
-    this.configManager = new ConfigManager();
-    this.taskManager = new TaskManager(this.logger);
+    this.configManager = new ConfigManager(this.logger);
+    this.apiManager = new ApiManager(this.logger);
+    this.taskManager = new TaskManager(this.logger, this.apiManager);
     this.hotFolderManager = new HotFolderManager(this.logger);
     this.systemIntegration = new SystemIntegration(this.logger);
     
@@ -319,6 +322,39 @@ class PhotoEditorApp {
 
     ipcMain.handle('config:reset', async () => {
       return this.configManager.reset();
+    });
+
+    // API管理相关
+    ipcMain.handle('api:get-all-providers', async () => {
+      return this.apiManager.getAllProviders();
+    });
+
+    ipcMain.handle('api:get-enabled-providers', async () => {
+      return this.apiManager.getEnabledProviders();
+    });
+
+    ipcMain.handle('api:add-custom-provider', async (_, config) => {
+      return this.apiManager.addCustomProvider(config);
+    });
+
+    ipcMain.handle('api:remove-custom-provider', async (_, id) => {
+      return this.apiManager.removeCustomProvider(id);
+    });
+
+    ipcMain.handle('api:update-provider', async (_, id, config) => {
+      return this.apiManager.updateProviderConfig(id, config);
+    });
+
+    ipcMain.handle('api:set-current-provider', async (_, id) => {
+      return this.apiManager.setCurrentProvider(id);
+    });
+
+    ipcMain.handle('api:get-current-provider', async () => {
+      return this.apiManager.getCurrentProviderConfig();
+    });
+
+    ipcMain.handle('api:test-provider', async (_, id) => {
+      return await this.apiManager.testProvider(id);
     });
 
     // 热文件夹相关

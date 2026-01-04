@@ -19,6 +19,16 @@ const electronAPI = {
   getConfig: (key: string) => ipcRenderer.invoke('config:get', key),
   setConfig: (key: string, value: any) => ipcRenderer.invoke('config:set', key, value),
   resetConfig: () => ipcRenderer.invoke('config:reset'),
+  
+  // API管理
+  getAllApiProviders: () => ipcRenderer.invoke('api:get-all-providers'),
+  getEnabledApiProviders: () => ipcRenderer.invoke('api:get-enabled-providers'),
+  addCustomApiProvider: (config: any) => ipcRenderer.invoke('api:add-custom-provider', config),
+  removeCustomApiProvider: (id: string) => ipcRenderer.invoke('api:remove-custom-provider', id),
+  updateApiProvider: (id: string, config: any) => ipcRenderer.invoke('api:update-provider', id, config),
+  setCurrentApiProvider: (id: string) => ipcRenderer.invoke('api:set-current-provider', id),
+  getCurrentApiProvider: () => ipcRenderer.invoke('api:get-current-provider'),
+  testApiProvider: (id: string) => ipcRenderer.invoke('api:test-provider', id),
 
   // 热文件夹
   startHotFolder: (config: any) => ipcRenderer.invoke('hotfolder:start', config),

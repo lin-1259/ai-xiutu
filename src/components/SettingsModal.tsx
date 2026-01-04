@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Tabs, Form, Input, Switch, Select, Button, Space, Alert, message } from 'antd';
+import { Modal, Tabs, Form, Input, Switch, Select, Button, Space, Alert, message, Card, Table, Popconfirm, Tag } from 'antd';
 import { 
   SettingOutlined, 
   ApiOutlined, 
   FolderOutlined, 
   BellOutlined,
-  DollarOutlined
+  DollarOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  TestTubeOutlined
 } from '@ant-design/icons';
 import { useAppStore } from '../stores/appStore';
 
 const { TabPane } = Tabs;
 const { TextArea } = Input;
+const { Option } = Select;
 
 interface SettingsModalProps {
   visible: boolean;
@@ -21,12 +26,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
   const { config, setConfig } = useAppStore();
   const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState('general');
+  const [apiProviders, setApiProviders] = useState<any[]>([]);
+  const [currentProvider, setCurrentProvider] = useState<any>(null);
+  const [isAddingProvider, setIsAddingProvider] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<any>(null);
+  const [apiForm] = Form.useForm();
 
   useEffect(() => {
     if (visible) {
       form.setFieldsValue(config);
+      loadApiProviders();
     }
   }, [visible, config, form]);
+
+  const loadApiProviders = async () => {
+    try {
+      if (window.electronAPI) {
+        const providers = await window.electronAPI.getAllApiProviders();
+        const current = await window.electronAPI.getCurrentApiProvider();
+        setApiProviders(providers);
+        setCurrentProvider(current);
+      }
+    } catch (error) {
+      console.error('加载API提供商失败:', error);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -56,17 +80,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
     }
   };
 
-  const handleTestApi = async (provider: 'doubao' | 'gemini') => {
+  const handleTestApi = async (providerId: string) => {
     try {
       message.loading('测试API连接中...', 0);
       
       if (window.electronAPI) {
-        const result = await window.electronAPI.testProvider?.(provider);
+        const result = await window.electronAPI.testApiProvider(providerId);
         
         if (result) {
-          message.success(`${provider === 'doubao' ? '豆包' : 'Google Gemini'} API连接成功`);
+          message.success('API连接成功');
         } else {
-          message.error(`${provider === 'doubao' ? '豆包' : 'Google Gemini'} API连接失败`);
+          message.error('API连接失败');
         }
       }
     } catch (error) {
@@ -75,6 +99,154 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
       message.destroy();
     }
   };
+
+  const handleAddProvider = async () => {
+    try {
+      const values = await apiForm.validateFields();
+      
+      if (window.electronAPI) {
+        const providerId = await window.electronAPI.addCustomApiProvider(values);
+        message.success('API提供商添加成功');
+        setIsAddingProvider(false);
+        apiForm.resetFields();
+        loadApiProviders();
+      }
+    } catch (error) {
+      message.error('添加API提供商失败');
+    }
+  };
+
+  const handleUpdateProvider = async (id: string) => {
+    try {
+      const values = await apiForm.validateFields();
+      
+      if (window.electronAPI) {
+        await window.electronAPI.updateApiProvider(id, values);
+        message.success('API提供商更新成功');
+        setEditingProvider(null);
+        apiForm.resetFields();
+        loadApiProviders();
+      }
+    } catch (error) {
+      message.error('更新API提供商失败');
+    }
+  };
+
+  const handleDeleteProvider = async (id: string) => {
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.removeCustomApiProvider(id);
+        message.success('API提供商已删除');
+        loadApiProviders();
+      }
+    } catch (error) {
+      message.error('删除API提供商失败');
+    }
+  };
+
+  const handleSetCurrentProvider = async (id: string) => {
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.setCurrentApiProvider(id);
+        message.success('已切换默认API提供商');
+        loadApiProviders();
+      }
+    } catch (error) {
+      message.error('切换API提供商失败');
+    }
+  };
+
+  const startEditProvider = (provider: any) => {
+    setEditingProvider(provider);
+    apiForm.setFieldsValue(provider);
+  };
+
+  const cancelEdit = () => {
+    setEditingProvider(null);
+    setIsAddingProvider(false);
+    apiForm.resetFields();
+  };
+
+  const apiColumns = [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (text: string, record: any) => (
+        <div>
+          <div>{text}</div>
+          {record.isCustom && <Tag size="small" color="blue">自定义</Tag>}
+        </div>
+      )
+    },
+    {
+      title: '提供商',
+      dataIndex: 'provider',
+      key: 'provider'
+    },
+    {
+      title: '模型',
+      dataIndex: 'model',
+      key: 'model'
+    },
+    {
+      title: '状态',
+      key: 'status',
+      render: (_, record: any) => (
+        <Space>
+          <Tag color={record.enabled ? 'green' : 'red'}>
+            {record.enabled ? '已启用' : '已禁用'}
+          </Tag>
+          {record.id === currentProvider?.id && <Tag color="blue">当前使用</Tag>}
+        </Space>
+      )
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_, record: any) => (
+        <Space>
+          <Button 
+            size="small" 
+            icon={<TestTubeOutlined />} 
+            onClick={() => handleTestApi(record.id)}
+          >
+            测试
+          </Button>
+          <Button 
+            size="small" 
+            icon={<EditOutlined />} 
+            onClick={() => startEditProvider(record)}
+          >
+            编辑
+          </Button>
+          {record.isCustom && (
+            <Popconfirm
+              title="确定删除这个API提供商吗？"
+              onConfirm={() => handleDeleteProvider(record.id)}
+            >
+              <Button 
+                size="small" 
+                danger 
+                icon={<DeleteOutlined />}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          )}
+          {record.enabled && record.id !== currentProvider?.id && (
+            <Button 
+              size="small" 
+              type="primary"
+              onClick={() => handleSetCurrentProvider(record.id)}
+            >
+              设为默认
+            </Button>
+          )}
+        </Space>
+      )
+    }
+  ];
 
   const tabItems = [
     {
@@ -163,38 +335,149 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
         </span>
       ),
       children: (
-        <Form form={form} layout="vertical" initialValues={config}>
+        <div>
           <Alert
-            message="API密钥安全说明"
-            description="您的API密钥将安全地存储在本地，不会上传到任何服务器。请妥善保管您的API密钥。"
+            message="API提供商管理"
+            description="您可以添加自定义的API提供商，支持基于New-API的各种AI模型接口。所有配置将安全保存在本地。"
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
           />
 
-          <Form.Item label="豆包API密钥" name={['api', 'doubao', 'apiKey']}>
-            <Input.Password placeholder="输入豆包API密钥" />
-          </Form.Item>
-
-          <Form.Item>
+          <div style={{ marginBottom: 16 }}>
             <Button 
-              onClick={() => handleTestApi('doubao')}
-              style={{ marginBottom: 16 }}
+              type="primary" 
+              icon={<PlusOutlined />}
+              onClick={() => setIsAddingProvider(true)}
             >
-              测试豆包API
+              添加自定义API
             </Button>
-          </Form.Item>
+          </div>
 
-          <Form.Item label="Google Gemini API密钥" name={['api', 'gemini', 'apiKey']}>
-            <Input.Password placeholder="输入Google Gemini API密钥" />
-          </Form.Item>
+          <Table
+            dataSource={apiProviders}
+            columns={apiColumns}
+            rowKey="id"
+            pagination={false}
+            size="small"
+          />
 
-          <Form.Item>
-            <Button onClick={() => handleTestApi('gemini')}>
-              测试Google Gemini API
-            </Button>
-          </Form.Item>
-        </Form>
+          {/* 添加/编辑API提供商弹窗 */}
+          <Modal
+            title={editingProvider ? '编辑API提供商' : '添加API提供商'}
+            open={isAddingProvider || !!editingProvider}
+            onOk={editingProvider ? () => handleUpdateProvider(editingProvider.id) : handleAddProvider}
+            onCancel={cancelEdit}
+            width={600}
+            okText="保存"
+            cancelText="取消"
+          >
+            <Form form={apiForm} layout="vertical">
+              <Form.Item
+                label="显示名称"
+                name="name"
+                rules={[{ required: true, message: '请输入显示名称' }]}
+              >
+                <Input placeholder="例如：我的自定义API" />
+              </Form.Item>
+
+              <Form.Item
+                label="提供商标识"
+                name="provider"
+                rules={[{ required: true, message: '请输入提供商标识' }]}
+              >
+                <Input placeholder="例如：custom, openai等" />
+              </Form.Item>
+
+              <Form.Item
+                label="API端点地址"
+                name="endpoint"
+                rules={[{ required: true, message: '请输入API端点地址' }]}
+              >
+                <Input placeholder="例如：https://your-api-domain.com/v1" />
+              </Form.Item>
+
+              <Form.Item
+                label="API密钥"
+                name="apiKey"
+                rules={[{ required: true, message: '请输入API密钥' }]}
+              >
+                <Input.Password placeholder="输入API密钥" />
+              </Form.Item>
+
+              <Form.Item
+                label="模型名称"
+                name="model"
+                rules={[{ required: true, message: '请输入模型名称' }]}
+              >
+                <Input placeholder="例如：gpt-4, claude-3等" />
+              </Form.Item>
+
+              <Form.Item
+                label="认证类型"
+                name="authType"
+                initialValue="bearer"
+              >
+                <Select>
+                  <Option value="bearer">Bearer Token</Option>
+                  <Option value="apikey">API Key</Option>
+                  <Option value="header">自定义请求头</Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                label="最大重试次数"
+                name="maxRetries"
+                initialValue={3}
+              >
+                <Input type="number" min={1} max={10} />
+              </Form.Item>
+
+              <Form.Item
+                label="重试延迟(毫秒)"
+                name="retryDelay"
+                initialValue={1000}
+              >
+                <Input type="number" min={100} max={10000} />
+              </Form.Item>
+
+              <Form.Item
+                label="速率限制(请求/秒)"
+                name="rateLimit"
+                initialValue={3}
+              >
+                <Input type="number" min={1} max={100} />
+              </Form.Item>
+
+              <Form.Item
+                label="启用状态"
+                name="enabled"
+                valuePropName="checked"
+                initialValue={true}
+              >
+                <Switch />
+              </Form.Item>
+
+              <Form.Item label="自定义请求头" name="customHeaders">
+                <TextArea 
+                  placeholder="以JSON格式输入自定义请求头，例如：&#10;{&#10;  &quot;X-Custom-Header&quot;: &quot;value&quot;&#10;}"
+                  rows={3}
+                  onChange={(e) => {
+                    // 尝试解析JSON
+                    try {
+                      const value = e.target.value;
+                      if (value.trim()) {
+                        JSON.parse(value);
+                      }
+                    } catch (error) {
+                      // 如果JSON解析失败，可以在这里显示错误
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Form>
+          </Modal>
+        </div>
       )
     },
     {
