@@ -25,7 +25,7 @@ export interface ProcessedImage {
   size: number;
   processedAt: Date;
   templateId: string;
-  apiProvider: 'doubao' | 'gemini';
+  apiProvider: string; // 改为字符串，支持任意API提供商
   cost: number;
 }
 
@@ -71,13 +71,19 @@ export interface Task {
 
 // API相关类型
 export interface ApiConfig {
-  provider: 'doubao' | 'gemini';
+  id: string; // 唯一标识符
+  provider: string; // API提供商名称（doubao, gemini, custom等）
+  name: string; // 显示名称
   apiKey: string;
   endpoint?: string;
+  model?: string; // 使用的AI模型
   maxRetries: number;
   retryDelay: number;
   rateLimit: number; // 每秒最大请求数
   enabled: boolean;
+  isCustom: boolean; // 是否为自定义API
+  authType?: 'bearer' | 'apikey' | 'header'; // 认证类型
+  customHeaders?: Record<string, string>; // 自定义请求头
 }
 
 export interface ApiRequest {

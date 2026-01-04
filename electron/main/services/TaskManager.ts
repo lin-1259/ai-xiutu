@@ -20,9 +20,9 @@ export class TaskManager {
   private logger: Logger;
   private taskCallbacks: Map<string, (task: Task) => void> = new Map();
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, apiManager: ApiManager) {
     this.logger = logger;
-    this.apiManager = new ApiManager(logger);
+    this.apiManager = apiManager;
     this.maxConcurrentTasks = 3; // 默认并发数
     
     this.initializeDatabase();
