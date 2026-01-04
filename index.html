@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI批量修图助手</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background-color: #f0f2f5;
+    }
+
+    code {
+      font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+        monospace;
+    }
+
+    /* 加载动画 */
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #1890ff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* 拖拽区域样式 */
+    .drag-drop-zone {
+      border: 2px dashed #d9d9d9;
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      background-color: #fafafa;
+      transition: all 0.3s;
+    }
+
+    .drag-drop-zone.dragover {
+      border-color: #1890ff;
+      background-color: #e6f7ff;
+    }
+
+    /* 进度条样式 */
+    .progress-bar {
+      height: 8px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background-color: #1890ff;
+      transition: width 0.3s ease;
+    }
+
+    /* 任务状态样式 */
+    .task-status {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .task-status.pending {
+      background-color: #f0f0f0;
+      color: #666;
+    }
+
+    .task-status.processing {
+      background-color: #e6f7ff;
+      color: #1890ff;
+    }
+
+    .task-status.completed {
+      background-color: #f6ffed;
+      color: #52c41a;
+    }
+
+    .task-status.failed {
+      background-color: #fff2f0;
+      color: #ff4d4f;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
