@@ -15,17 +15,21 @@ interface WorkerTaskData {
   taskId: string;
   imageId: string;
   templateId: string;
+  templateData?: any;
+  userDataPath: string;
 }
 
 export class TaskWorker {
   private apiManager: ApiManager;
   private cacheManager: CacheManager;
   private logger: Logger;
+  private userDataPath: string;
 
-  constructor() {
-    this.apiManager = new ApiManager();
-    this.cacheManager = new CacheManager();
+  constructor(userDataPath: string) {
+    this.userDataPath = userDataPath;
     this.logger = new Logger();
+    this.apiManager = new ApiManager(this.logger);
+    this.cacheManager = new CacheManager(this.logger, userDataPath);
   }
 
   async processTask(taskData: WorkerTaskData): Promise<void> {
@@ -33,7 +37,7 @@ export class TaskWorker {
       this.logger.info(`开始处理任务: ${taskData.taskId}`);
 
       // 读取图片
-      const imagePath = join(process.cwd(), 'temp', `${taskData.imageId}.jpg`);
+      const imagePath = join(this.userDataPath, 'temp', `${taskData.imageId}.jpg`);
       if (!existsSync(imagePath)) {
         throw new Error(`图片文件不存在: ${imagePath}`);
       }
@@ -64,17 +68,23 @@ export class TaskWorker {
       }
 
       // 读取模板配置
-      const template = await this.getTemplate(taskData.templateId);
+      let template = taskData.templateData;
+      if (!template) {
+        template = await this.getTemplate(taskData.templateId);
+      }
+      
       if (!template) {
         throw new Error(`模板不存在: ${taskData.templateId}`);
       }
 
       // 图片预处理
-      const processedImage = await this.preprocessImage(imageBuffer, template.params);
+      const sharpInstance = await this.preprocessImage(imageBuffer, template.params);
+      const processedImageBuffer = await sharpInstance.toBuffer();
+      const metadata = await sharpInstance.metadata();
 
       // 准备API请求
       const apiRequest: ApiRequest = {
-        imageData: processedImage.toString('base64'),
+        imageData: processedImageBuffer.toString('base64'),
         prompt: template.prompt,
         negativePrompt: template.negativePrompt,
         params: template.params
@@ -89,8 +99,14 @@ export class TaskWorker {
         throw new Error(apiResponse.error || 'API处理失败');
       }
 
+      // 确保输出目录存在
+      const outputDir = join(this.userDataPath, 'output');
+      if (!existsSync(outputDir)) {
+        mkdirSync(outputDir, { recursive: true });
+      }
+
       // 保存结果
-      const outputPath = join(process.cwd(), 'output', `${taskData.taskId}.jpg`);
+      const outputPath = join(outputDir, `${taskData.taskId}.jpg`);
       const outputBuffer = Buffer.from(apiResponse.imageData!, 'base64');
 
       // 写入文件
@@ -98,7 +114,7 @@ export class TaskWorker {
       fs.writeFileSync(outputPath, outputBuffer);
 
       // 生成缩略图
-      const thumbnailPath = join(process.cwd(), 'output', `${taskData.taskId}_thumb.jpg`);
+      const thumbnailPath = join(outputDir, `${taskData.taskId}_thumb.jpg`);
       await sharp(outputBuffer)
         .resize(200, 200, { fit: 'inside' })
         .jpeg({ quality: 80 })
@@ -110,13 +126,13 @@ export class TaskWorker {
         originalPath: imagePath,
         processedPath: outputPath,
         thumbnailPath: thumbnailPath,
-        width: processedImage.width,
-        height: processedImage.height,
+        width: metadata.width || 0,
+        height: metadata.height || 0,
         format: 'jpg',
         size: outputBuffer.length,
         processedAt: new Date(),
         templateId: taskData.templateId,
-        apiProvider: this.apiManager.getCurrentProvider(),
+        apiProvider: this.apiManager.getCurrentProviderId(),
         cost: apiResponse.cost || 0
       };
 
@@ -143,7 +159,7 @@ export class TaskWorker {
       
       parentPort?.postMessage({
         type: 'error',
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
@@ -272,17 +288,17 @@ export class TaskWorker {
 
 // 工作线程主逻辑
 if (parentPort) {
-  const worker = new TaskWorker();
-  const { taskId, imageId, templateId } = workerData as WorkerTaskData;
+  const { taskId, imageId, templateId, userDataPath } = workerData as WorkerTaskData;
+  const worker = new TaskWorker(userDataPath);
 
-  worker.processTask({ taskId, imageId, templateId })
+  worker.processTask({ taskId, imageId, templateId, userDataPath })
     .then(() => {
-      parentPort?.postMessage({ type: 'completed' });
+      // parentPort.postMessage({ type: 'completed' }); // 已经在processTask中发送了更详细的结果
     })
     .catch((error) => {
       parentPort?.postMessage({ 
         type: 'error', 
-        error: error.message 
+        error: error instanceof Error ? error.message : String(error) 
       });
     });
 }

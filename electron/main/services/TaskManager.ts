@@ -19,10 +19,12 @@ export class TaskManager {
   private apiManager: ApiManager;
   private logger: Logger;
   private taskCallbacks: Map<string, (task: Task) => void> = new Map();
+  private userDataPath: string;
 
-  constructor(logger: Logger, apiManager: ApiManager) {
+  constructor(logger: Logger, apiManager: ApiManager, userDataPath: string) {
     this.logger = logger;
     this.apiManager = apiManager;
+    this.userDataPath = userDataPath;
     this.maxConcurrentTasks = 3; // 默认并发数
     
     this.initializeDatabase();
@@ -30,7 +32,7 @@ export class TaskManager {
   }
 
   private initializeDatabase(): void {
-    const dbPath = join(process.env.APPDATA || join(process.cwd(), 'data'), 'tasks.db');
+    const dbPath = join(this.userDataPath, 'tasks.db');
     
     if (!existsSync(dirname(dbPath))) {
       mkdirSync(dirname(dbPath), { recursive: true });
@@ -78,6 +80,21 @@ export class TaskManager {
       )
     `);
 
+    // 创建模板表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        category TEXT,
+        prompt TEXT NOT NULL,
+        negativePrompt TEXT,
+        params TEXT NOT NULL,
+        isBuiltIn INTEGER DEFAULT 0,
+        createdAt TEXT NOT NULL
+      )
+    `);
+
     // 创建索引
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -89,9 +106,15 @@ export class TaskManager {
   private loadTasksFromDatabase(): void {
     try {
       const stmt = this.db.prepare('SELECT * FROM tasks WHERE status IN (?, ?)');
-      const pendingTasks = stmt.all('pending', 'retrying') as Task[];
+      const pendingTasks = stmt.all('pending', 'retrying') as any[];
       
-      this.taskQueue = pendingTasks;
+      this.taskQueue = pendingTasks.map(t => ({
+        ...t,
+        createdAt: new Date(t.createdAt),
+        startedAt: t.startedAt ? new Date(t.startedAt) : undefined,
+        completedAt: t.completedAt ? new Date(t.completedAt) : undefined,
+        result: t.result ? JSON.parse(t.result) : undefined
+      }));
       this.logger.info(`加载了 ${pendingTasks.length} 个待处理任务`);
     } catch (error) {
       this.logger.error('加载任务数据失败', error);
@@ -294,7 +317,14 @@ export class TaskManager {
 
     try {
       const stmt = this.db.prepare(query);
-      return stmt.all(...params) as Task[];
+      const results = stmt.all(...params) as any[];
+      return results.map(t => ({
+        ...t,
+        createdAt: new Date(t.createdAt),
+        startedAt: t.startedAt ? new Date(t.startedAt) : undefined,
+        completedAt: t.completedAt ? new Date(t.completedAt) : undefined,
+        result: t.result ? JSON.parse(t.result) : undefined
+      }));
     } catch (error) {
       this.logger.error('获取任务列表失败', error);
       return [];
@@ -329,13 +359,18 @@ export class TaskManager {
       
       this.logger.info(`开始处理任务: ${task.id}`);
       
+      // 获取模板信息
+      const template = await this.getTemplate(task.templateId);
+
       // 创建工作线程
-      const workerPath = join(__dirname, '../services/TaskWorker.js');
+      const workerPath = join(__dirname, './TaskWorker.js');
       const worker = new Worker(workerPath, {
         workerData: {
           taskId: task.id,
           imageId: task.imageId,
-          templateId: task.templateId
+          templateId: task.templateId,
+          templateData: template,
+          userDataPath: this.userDataPath
         }
       });
 
@@ -445,5 +480,45 @@ export class TaskManager {
 
   setMaxConcurrentTasks(max: number): void {
     this.maxConcurrentTasks = Math.max(1, Math.min(max, 10));
+  }
+
+  async getTemplate(templateId: string): Promise<any | null> {
+    try {
+      const stmt = this.db.prepare('SELECT * FROM templates WHERE id = ?');
+      const result = stmt.get(templateId) as any;
+      if (result) {
+        return {
+          ...result,
+          params: JSON.parse(result.params),
+          isBuiltIn: !!result.isBuiltIn
+        };
+      }
+      return null;
+    } catch (error) {
+      this.logger.error(`获取模板失败: ${templateId}`, error);
+      return null;
+    }
+  }
+
+  async addTemplate(template: any): Promise<void> {
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO templates (id, name, description, category, prompt, negativePrompt, params, isBuiltIn, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        template.id,
+        template.name,
+        template.description,
+        template.category,
+        template.prompt,
+        template.negativePrompt,
+        JSON.stringify(template.params),
+        template.isBuiltIn ? 1 : 0,
+        new Date().toISOString()
+      );
+    } catch (error) {
+      this.logger.error(`添加模板失败: ${template.id}`, error);
+    }
   }
 }

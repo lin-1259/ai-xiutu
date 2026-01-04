@@ -1,14 +1,15 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, shell } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, shell, Notification } from 'electron';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync } from 'fs';
-import Store from 'electron-store';
+import sharp from 'sharp';
 import { TaskManager } from './services/TaskManager.js';
 import { HotFolderManager } from './services/HotFolderManager.js';
 import { SystemIntegration } from './services/SystemIntegration.js';
 import { ConfigManager } from './services/ConfigManager.js';
 import { Logger } from './services/Logger.js';
 import { ApiManager } from './services/ApiManager.js';
+import { ApiManagerInitializer } from './services/ApiManagerInitializer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,12 +25,15 @@ class PhotoEditorApp {
   private apiManager: ApiManager;
 
   constructor() {
-    this.logger = new Logger();
+    const userDataPath = app.getPath('userData');
+    this.logger = new Logger(userDataPath);
     this.configManager = new ConfigManager(this.logger);
     this.apiManager = new ApiManager(this.logger);
-    this.taskManager = new TaskManager(this.logger, this.apiManager);
-    this.hotFolderManager = new HotFolderManager(this.logger);
-    this.systemIntegration = new SystemIntegration(this.logger);
+    const apiInitializer = new ApiManagerInitializer(this.apiManager, this.configManager, this.logger);
+    apiInitializer.initialize();
+    this.taskManager = new TaskManager(this.logger, this.apiManager, userDataPath);
+    this.hotFolderManager = new HotFolderManager(this.logger, this.taskManager, this.configManager, userDataPath, () => this.mainWindow);
+    this.systemIntegration = new SystemIntegration(this.logger, userDataPath);
     
     this.setupApp();
     this.setupIPC();
@@ -98,9 +102,9 @@ class PhotoEditorApp {
 
     // 安全策略
     app.on('web-contents-created', (_, contents) => {
-      contents.on('new-window', (navigationEvent, navigationUrl) => {
-        navigationEvent.preventDefault();
-        shell.openExternal(navigationUrl);
+      contents.setWindowOpenHandler(({ url }) => {
+        shell.openExternal(url);
+        return { action: 'deny' };
       });
     });
   }
@@ -118,11 +122,9 @@ class PhotoEditorApp {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        enableRemoteModule: false,
-        preload: join(__dirname, 'preload.js'),
+        preload: join(__dirname, '../preload.js'),
         webSecurity: true,
         allowRunningInsecureContent: false,
-        experimentalFeatures: false
       },
       show: false,
       titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default'
@@ -307,8 +309,18 @@ class PhotoEditorApp {
     });
 
     ipcMain.handle('file:read-image-info', async (_, filePath) => {
-      // 这里需要实现图片信息读取
-      return { width: 1920, height: 1080, format: 'jpg', size: 1024000 };
+      try {
+        const metadata = await sharp(filePath).metadata();
+        return {
+          width: metadata.width,
+          height: metadata.height,
+          format: metadata.format,
+          size: (await import('fs')).statSync(filePath).size
+        };
+      } catch (error) {
+        this.logger.error(`读取图片信息失败: ${filePath}`, error);
+        throw error;
+      }
     });
 
     // 配置管理相关
@@ -381,10 +393,13 @@ class PhotoEditorApp {
 
     // 通知相关
     ipcMain.handle('notification:show', async (_, notification) => {
-      new Notification(notification.title, {
-        body: notification.message,
-        icon: join(__dirname, '../assets/icons/icon.png')
-      }).show();
+      if (Notification.isSupported()) {
+        new Notification({
+          title: notification.title,
+          body: notification.message,
+          icon: join(__dirname, '../assets/icons/icon.png')
+        }).show();
+      }
     });
 
     // 应用状态相关

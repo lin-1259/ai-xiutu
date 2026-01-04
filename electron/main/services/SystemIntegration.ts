@@ -10,9 +10,11 @@ const execAsync = promisify(exec);
 export class SystemIntegration {
   private logger: Logger;
   private platform: string;
+  private userDataPath: string;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, userDataPath: string) {
     this.logger = logger;
+    this.userDataPath = userDataPath;
     this.platform = platform();
   }
 
@@ -425,7 +427,7 @@ X-GNOME-Autostart-enabled=true
       arch: process.arch,
       version: process.version,
       execPath: process.execPath,
-      userData: process.env.APPDATA || process.env.HOME
+      userData: this.userDataPath
     };
   }
 

@@ -332,7 +332,9 @@ export class ConfigManager {
 
   // 监听配置变化
   onConfigChange(callback: (key: string, value: any) => void): void {
-    this.store.onDidChange((newValue, oldValue) => {
+    // electron-store onDidChange(key, callback) or onDidAnyChange(callback)
+    // Here we want to know what changed, so we might need onDidAnyChange
+    (this.store as any).onDidAnyChange((newValue: any, oldValue: any) => {
       // 找出变化的配置项
       const changedKeys = this.findChangedKeys(oldValue, newValue);
       

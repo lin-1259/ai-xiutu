@@ -1,10 +1,10 @@
 import chokidar from 'chokidar';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, statSync, readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { Logger } from './Logger.js';
 import { ConfigManager } from './ConfigManager.js';
 import { TaskManager } from './TaskManager.js';
-import { ipcMain } from 'electron';
+import { BrowserWindow } from 'electron';
 
 export interface HotFolderConfig {
   enabled: boolean;
@@ -23,11 +23,21 @@ export class HotFolderManager {
   private isRunning = false;
   private processedFiles: Set<string> = new Set();
   private config: HotFolderConfig;
+  private userDataPath: string;
+  private getMainWindow: () => BrowserWindow | null;
 
-  constructor(logger: Logger) {
+  constructor(
+    logger: Logger, 
+    taskManager: TaskManager, 
+    configManager: ConfigManager, 
+    userDataPath: string,
+    getMainWindow: () => BrowserWindow | null
+  ) {
     this.logger = logger;
-    this.configManager = new ConfigManager(logger);
-    this.taskManager = new TaskManager(logger);
+    this.taskManager = taskManager;
+    this.configManager = configManager;
+    this.userDataPath = userDataPath;
+    this.getMainWindow = getMainWindow;
     this.config = this.configManager.getHotFolderConfig();
     
     // 加载配置
@@ -147,8 +157,7 @@ export class HotFolderManager {
       }
 
       // 检查文件大小
-      const fs = await import('fs');
-      const stats = fs.statSync(filePath);
+      const stats = statSync(filePath);
       
       if (stats.size < 1024) { // 小于1KB的文件可能是空文件或损坏
         this.logger.warn(`跳过过小的文件: ${fileName}`);
@@ -158,7 +167,10 @@ export class HotFolderManager {
       this.logger.info(`检测到新文件: ${filePath}`);
 
       // 发送通知到渲染进程
-      ipcMain.emit('hotfolder:new-file', null, filePath);
+      const mainWindow = this.getMainWindow();
+      if (mainWindow) {
+        mainWindow.webContents.send('hotfolder:new-file', filePath);
+      }
 
       // 自动创建任务
       if (this.config.autoStart) {
@@ -237,8 +249,7 @@ export class HotFolderManager {
 
   private async copyFileToWorkingDir(sourcePath: string, imageId: string): Promise<void> {
     try {
-      const fs = await import('fs');
-      const workingDir = join(process.env.APPDATA || join(process.cwd(), 'data'), 'temp');
+      const workingDir = join(this.userDataPath, 'temp');
       
       if (!existsSync(workingDir)) {
         mkdirSync(workingDir, { recursive: true });
@@ -247,7 +258,7 @@ export class HotFolderManager {
       const destPath = join(workingDir, `${imageId}.jpg`);
       
       // 简单的文件复制，实际应该保持原始格式
-      fs.copyFileSync(sourcePath, destPath);
+      copyFileSync(sourcePath, destPath);
       
     } catch (error) {
       this.logger.error(`复制文件失败: ${sourcePath}`, error);
@@ -310,14 +321,13 @@ export class HotFolderManager {
         throw new Error(`目录不存在: ${targetDir}`);
       }
 
-      const fs = await import('fs');
-      const files = fs.readdirSync(targetDir);
+      const files = readdirSync(targetDir);
       
       let processedCount = 0;
       
       for (const file of files) {
         const filePath = join(targetDir, file);
-        const stats = fs.statSync(filePath);
+        const stats = statSync(filePath);
         
         if (stats.isFile()) {
           const result = await this.processFileManually(filePath);

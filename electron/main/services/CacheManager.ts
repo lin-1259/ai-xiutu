@@ -16,10 +16,12 @@ export class CacheManager {
   private maxCacheSize: number; // 最大缓存大小 (bytes)
   private maxEntries: number; // 最大条目数
   private cleanupInterval: NodeJS.Timeout;
+  private userDataPath: string;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, userDataPath: string) {
     this.logger = logger;
-    this.cacheDir = join(process.env.APPDATA || join(process.cwd(), 'data'), 'cache');
+    this.userDataPath = userDataPath;
+    this.cacheDir = join(this.userDataPath, 'cache');
     this.maxCacheSize = 1024 * 1024 * 1024; // 1GB
     this.maxEntries = 1000;
     
